@@ -29,11 +29,17 @@ KOK = Path(__file__).resolve().parent.parent
 def _env_yukle(yol: Path) -> None:
     """Basit .env okuyucu; zaten tanımlı ortam değişkenlerini ezmez."""
     if yol.exists():
-        for satir in yol.read_text(encoding="utf-8").splitlines():
+        # utf-8-sig: Windows Not Defteri dosyanın başına BOM ekleyebilir, ilk anahtar bozulmasın
+        for satir in yol.read_text(encoding="utf-8-sig").splitlines():
             satir = satir.strip()
+            if satir.startswith("export "):
+                satir = satir[len("export "):].strip()
             if satir and not satir.startswith("#") and "=" in satir:
                 k, v = satir.split("=", 1)
-                os.environ.setdefault(k.strip(), v.strip())
+                v = v.strip()
+                if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
+                    v = v[1:-1]  # KEY="deger" yazımında tırnakları at
+                os.environ.setdefault(k.strip(), v)
 
 
 _env_yukle(KOK / ".env")
@@ -44,7 +50,7 @@ TIMEOUT_S = float(os.getenv("VOICEBI_QUERY_TIMEOUT_S", "5"))
 app = FastAPI(title="VerSes", description="Türkçe sesli veri analisti için veritabanı araçları.")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("VOICEBI_CORS", "http://localhost:8000,http://127.0.0.1:8000").split(","),
+    allow_origins=os.getenv("VOICEBI_CORS", "http://localhost:8000,http://127.0.0.1:8000,http://localhost:8765,http://127.0.0.1:8765").split(","),
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
@@ -110,7 +116,7 @@ def analyze_trend(body: TrendIn):
     return tools.analyze_trend(DB_PATH, **body.model_dump())
 
 
-# Ön yüz (2. gün) hazır olduğunda aynı sunucudan servis edilir
+# Ön yüz aynı sunucudan servis edilir (aynı köken: tarayıcı araç çağrılarında CORS gerekmez)
 _FRONTEND = KOK / "frontend"
 if _FRONTEND.exists():
     app.mount("/", StaticFiles(directory=_FRONTEND, html=True), name="frontend")

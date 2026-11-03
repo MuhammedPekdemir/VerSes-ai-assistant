@@ -78,7 +78,8 @@ def baglan(db_path: Path) -> sqlite3.Connection:
     """Veritabanını salt-okunur açar."""
     if not Path(db_path).exists():
         raise FileNotFoundError(f"Veritabanı bulunamadı: {db_path}. Önce `python data/generate_data.py` çalıştırın.")
-    con = sqlite3.connect(f"file:{Path(db_path).resolve()}?mode=ro", uri=True, check_same_thread=False)
+    # as_uri(): Windows yolundaki ters bölü, boşluk, "#" ve Türkçe karakterler URI içinde doğru kodlanır
+    con = sqlite3.connect(Path(db_path).resolve().as_uri() + "?mode=ro", uri=True, check_same_thread=False)
     con.execute("PRAGMA query_only = ON")
     return con
 

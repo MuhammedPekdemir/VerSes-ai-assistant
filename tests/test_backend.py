@@ -133,3 +133,22 @@ def test_analyze_trend_ters_tarih_ve_veri_disi_donem():
     assert tools.analyze_trend(DB, "ciro", "2026-05-31", "2026-04-01", "2026-06-01", "2026-07-31")["ok"] is False
     r = tools.analyze_trend(DB, "ciro", "2030-01-01", "2030-01-31", "2030-02-01", "2030-02-28")
     assert r["ok"] and "veri yok" in r["uyari"]
+
+
+def test_analyze_trend_tek_donem_veri_disi_cokmez():
+    # B dönemi veri aralığının dışında: daha önce None / float bölmesinde TypeError veriyordu
+    r = tools.analyze_trend(DB, "ciro", "2026-09-01", "2026-09-30", "2026-11-01", "2026-11-30")
+    assert r["ok"] and "Dönem B" in r["uyari"] and r["degisim_yuzde"] is None
+    r = tools.analyze_trend(DB, "iade_orani", "2024-11-01", "2024-11-30", "2026-03-01", "2026-03-31")
+    assert r["ok"] and "Dönem A" in r["uyari"]
+
+
+def test_env_okuyucu_bom_ve_tirnak(tmp_path, monkeypatch):
+    from backend.app import _env_yukle
+    monkeypatch.delenv("VERSES_TEST_A", raising=False)
+    monkeypatch.delenv("VERSES_TEST_B", raising=False)
+    f = tmp_path / ".env"
+    f.write_bytes('\ufeffVERSES_TEST_A="tirnakli"\nexport VERSES_TEST_B=duz\n'.encode("utf-8"))
+    _env_yukle(f)
+    import os
+    assert os.environ["VERSES_TEST_A"] == "tirnakli" and os.environ["VERSES_TEST_B"] == "duz"

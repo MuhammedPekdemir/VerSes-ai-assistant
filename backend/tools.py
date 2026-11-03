@@ -169,7 +169,8 @@ def analyze_trend(db_path: Path, metric: str, donem_a_bas: str, donem_a_bit: str
             return {g: (v, n) for g, v, n in con.execute(q, d)}
 
         ta, tb = toplam(a), toplam(b)
-        genel_oran = (tb / ta) if ta else None
+        # Dönemlerden birinde hiç satır yoksa SUM/AVG NULL döner; oranı hesaplama
+        genel_oran = (tb / ta) if ta and tb is not None else None
         boyutlar = [dimension] if dimension else list(BOYUTLAR)
         kirilimlar = {}
         for boyut in boyutlar:
@@ -217,7 +218,7 @@ def analyze_trend(db_path: Path, metric: str, donem_a_bas: str, donem_a_bit: str
         "metrik_etiketi": etiket,
         "donem_a": _donem(a, ta, metric),
         "donem_b": _donem(b, tb, metric),
-        "degisim_yuzde": _yuvarla((tb - ta) / ta * 100) if ta else None,
+        "degisim_yuzde": _yuvarla((tb - ta) / ta * 100) if ta and tb is not None else None,
         "en_belirgin_kirilim": ozet,
         "kirilimlar": kirilimlar,
     }

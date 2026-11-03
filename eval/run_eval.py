@@ -45,7 +45,18 @@ def ws_url(agent_id: str) -> str:
     return f"wss://api.elevenlabs.io/v1/convai/conversation?agent_id={agent_id}"
 
 
+TREND_PARAMETRELERI = {"metric", "donem_a_bas", "donem_a_bit", "donem_b_bas", "donem_b_bit", "dimension"}
+
+
 def araci_calistir(ad: str, p: dict) -> str:
+    # Araç hatası tüm soruyu düşürmesin: ajana okunur bir hata dön ki düzeltebilsin
+    try:
+        return _arac(ad, p)
+    except Exception as e:
+        return json.dumps({"ok": False, "error": f"{type(e).__name__}: {e}"}, ensure_ascii=False)
+
+
+def _arac(ad: str, p: dict) -> str:
     if ad == "get_schema":
         return json.dumps(tools.get_schema(DB_PATH), ensure_ascii=False)
     if ad == "run_query":
@@ -55,7 +66,9 @@ def araci_calistir(ad: str, p: dict) -> str:
             r["rows"] = r["rows"][:100]
         return json.dumps(r, ensure_ascii=False)
     if ad == "analyze_trend":
-        return json.dumps(tools.analyze_trend(DB_PATH, **p), ensure_ascii=False)
+        # Ajan fazladan bir alan gönderirse TypeError almayalım; arayüzdeki FastAPI modeli de bunları yok sayar
+        return json.dumps(tools.analyze_trend(DB_PATH, **{k: v for k, v in p.items() if k in TREND_PARAMETRELERI}),
+                          ensure_ascii=False)
     if ad == "show_chart":
         return "Grafik ekranda gösteriliyor."
     return f"Bilinmeyen araç: {ad}"
@@ -109,8 +122,11 @@ async def sor(agent_id: str, soru: str) -> dict:
 def dogru_cevap(soru: dict):
     if "beklenen" in soru:
         return soru["beklenen"]
-    with sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True) as con:
+    con = sqlite3.connect(Path(DB_PATH).resolve().as_uri() + "?mode=ro", uri=True)
+    try:
         return con.execute(soru["sql"]).fetchone()[0]
+    finally:
+        con.close()
 
 
 def bicimle(v) -> str:
