@@ -1,0 +1,16 @@
+{
+  "agent_id": "agent_6701m6efqgdyeazae84af6kv7bkd",
+  "name": "VerSes - Sesli Veri Analisti",
+  "language": "tr",
+  "voice_id": "YsN6GJCMgACs4GeBE5No",
+  "llm": "claude-haiku-4-5",
+  "temperature": 0,
+  "timezone": "Europe/Istanbul",
+  "prompt_file": "agent/prompt.md",
+  "client_tools": {
+    "get_schema": "tool_5801m6efnsvgeck9zecfdwnrf5rt",
+    "run_query": "tool_9401m6efnt9te7vvf8a1zn76wa7q",
+    "analyze_trend": "tool_7201m6efnv1gfzcr77rxmh7kdvf0",
+    "show_chart": "tool_6001m6efnvgrfvk92c0kr93ccj3p"
+  }
+}

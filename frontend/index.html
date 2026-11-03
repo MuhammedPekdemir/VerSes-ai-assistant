@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VerSes</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="vendor/plotly-2.35.2.min.js"></script>
+</head>
+<body data-screen="landing">
+
+  <!-- ============================================================ giriş -->
+  <section id="landing" class="landing" aria-label="Giriş">
+    <div class="landing-inner">
+      <span class="powered">ElevenLabs Agents ile çalışır</span>
+      <h1>VerSes</h1>
+      <p class="tagline">Veri + Ses: satış verine sesli soru sor, Türkçe sesle cevap al.</p>
+
+      <button id="start-orb" class="orb orb-xl" aria-label="Küreye dokun ve konuşmaya başla">
+        <canvas class="orb-canvas" width="640" height="640" aria-hidden="true"></canvas>
+        <svg class="orb-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg>
+      </button>
+      <p class="orb-hint">Küreye dokun ve konuşmaya başla</p>
+
+      <ol class="features">
+        <li>
+          <span class="num">1</span>
+          <b>Sesle sor</b>
+          <small>"Geçen ay ciro ne kadardı?" de. ElevenLabs Scribe Türkçe konuşmanı yazıya çevirir.</small>
+        </li>
+        <li>
+          <span class="num">2</span>
+          <b>Veriden cevap</b>
+          <small>Ajan soruyu anlar, 30 bin siparişlik veritabanında güvenli SQL çalıştırır, sebep arar.</small>
+        </li>
+        <li>
+          <span class="num">3</span>
+          <b>Dinle ve gör</b>
+          <small>Cevabı Türkçe sesle okur, hazırladığı grafiği tek tıkla açarsın.</small>
+        </li>
+      </ol>
+
+      <button id="start-text" class="link-btn">Mikrofonsuz dene, yazarak sor →</button>
+    </div>
+  </section>
+
+  <!-- ============================================================ sohbet -->
+  <section id="chat" class="chat" aria-label="Sohbet" hidden>
+    <header class="chat-head">
+      <button id="home" class="brand" aria-label="Giriş sayfasına dön">
+        <span class="logo" aria-hidden="true"></span>
+        <span>VerSes</span>
+      </button>
+      <div class="head-right">
+        <span id="mode" class="mode">Hazır</span>
+        <span id="status" class="status" data-state="idle">Bağlı değil</span>
+      </div>
+    </header>
+
+    <div class="chat-body">
+      <div id="transcript" class="transcript" aria-live="polite">
+        <div class="hint">
+          <p>Şunları sorabilirsin:</p>
+          <button class="chip">Geçen ay ciro ne kadardı?</button>
+          <button class="chip">Kategorilere göre bu yılın satışlarını göster</button>
+          <button class="chip">Haziranda Elektronik satışları neden düştü?</button>
+          <button class="chip">Mart 2026'da hangi şehirde teslimat gecikti?</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="composer">
+      <button id="mic" class="orb orb-sm" aria-label="Sesli konuşmayı başlat">
+        <canvas class="orb-canvas" width="160" height="160" aria-hidden="true"></canvas>
+        <svg class="orb-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg>
+      </button>
+      <form id="text-form" class="text-form">
+        <input id="text-input" type="text" placeholder="Konuş ya da yaz…" autocomplete="off" aria-label="Soru yaz">
+        <button type="submit" aria-label="Gönder">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 20.5 21 12 3 3.5v6.6l12 1.9-12 1.9v6.6Z"/></svg>
+        </button>
+      </form>
+      <span id="mic-label" class="sr-only">Konuşmaya başla</span>
+    </div>
+  </section>
+
+  <!-- ============================================================ sonuç paneli -->
+  <aside id="drawer" class="drawer" aria-label="Sonuç" aria-hidden="true">
+    <div class="drawer-head">
+      <h2 id="chart-title">Grafik</h2>
+      <button id="drawer-close" class="icon-btn" aria-label="Paneli kapat">✕</button>
+    </div>
+    <div class="tabs" role="tablist">
+      <button class="tab active" data-view="chart" role="tab">Grafik</button>
+      <button class="tab" data-view="table" role="tab">Tablo</button>
+    </div>
+    <div id="chart" class="chart"></div>
+    <div id="table" class="table-wrap" hidden></div>
+    <details class="sql">
+      <summary><span>Çalışan sorgu</span><span id="sql-meta" class="muted"></span></summary>
+      <pre id="sql-box"><code>Henüz sorgu yok.</code></pre>
+    </details>
+  </aside>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
