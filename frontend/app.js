@@ -10,8 +10,10 @@ const ui = {
   sqlBox: $("sql-box"), sqlMeta: $("sql-meta"), copySql: $("copy-sql"),
   wave: document.querySelector(".mic .wave"),
   startVoice: $("start-voice"), startText: $("start-text"), home: $("home"),
-  landing: $("landing"), chat: $("chat"), drawer: $("drawer"), drawerClose: $("drawer-close"),
-  heroBars: $("hero-bars"), heroRange: $("hero-range"),
+  landing: $("landing"), chat: $("chat"), stage: $("stage"),
+  panel: $("panel"), panelHome: $("panel-home"), panelEmpty: $("panel-empty"), panelBody: $("panel-body"),
+  panelClose: $("panel-close"), history: $("history"),
+  heroBars: $("hero-bars"), heroNote: $("hero-note"),
 };
 
 let conversation = null;
@@ -20,14 +22,21 @@ let voiceMode = false;
 // kullanıcı eski bir grafiği açtığında ajanın bir sonraki show_chart çağrısı yanlış veriyi çizmez.
 let last = null;   // { columns, rows, chart, title?, sql, meta }
 let shown = null;  // panelde açık olan sonuç
+// Tek satırlık son sonuç (ör. "Ekim cirosu"). Ajan hemen ardından dökümü (haftalık ciro gibi) çizdirirse
+// bu toplam, grafiğin üstünde büyük sayı olarak gösterilir; böylece tek sayılık cevapta da panel boş kalmaz.
+let headline = null; // { columns, rows, at }
+const HEADLINE_MS = 3 * 60 * 1000;
 let schemaCache = null;  // giriş ekranı da şemayı okur (sayılar için); ajan aynısını alır
-let schemaNoted = false;
 
 // LLM'e giden sonucu kısa tutmak için: grafik ve tablo tüm satırları kullanır, ajan ilk 100'ü görür
 const LLM_ROW_LIMIT = 100;
 
 // ---------------------------------------------------------------- biçimlendirme
 const nf = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 2 });
+const AYLAR_UZUN = ["Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"];
+const longMonth = (v) => `${AYLAR_UZUN[+v.slice(5, 7) - 1]} ${v.slice(0, 4)}`;
+// Cümle içinde okunur tutar: 12.255.096 → "12,3 milyon"
+const spoken = (v) => (Math.abs(v) >= 1e6 ? `${nf.format(+(v / 1e6).toFixed(1))} milyon` : nf.format(Math.round(v)));
 const AYLAR = ["Oca", "Şub", "Mar", "Nis", "May", "Haz", "Tem", "Ağu", "Eyl", "Eki", "Kas", "Ara"];
 // Yıl, ay numarası ve kimlik kolonları sayı gibi görünür ama binlik ayraçla yazılmamalı (2025, "2.025" değil)
 const RAW_COL = /(^|_)(yil|yıl|year|ay_no|id)$|_id$|^id_/i;
@@ -40,6 +49,17 @@ function dateLabel(v) {
   if (isMonth(v)) return `${AYLAR[+v.slice(5, 7) - 1]} ${v.slice(0, 4)}`;
   if (isDay(v)) return `${+v.slice(8, 10)} ${AYLAR[+v.slice(5, 7) - 1]} ${v.slice(0, 4)}`;
   return v;
+}
+// Tam ayları kısa yaz: 2026-04-01 – 2026-05-31 → "Nis–May 2026"; değilse gün gün
+function periodLabel(a, b) {
+  const [y1, m1, d1] = a.split("-").map(Number), [y2, m2, d2] = b.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(y2, m2, 0)).getUTCDate();
+  if (d1 === 1 && d2 === lastDay) {
+    if (y1 === y2 && m1 === m2) return `${AYLAR[m1 - 1]} ${y1}`;
+    if (y1 === y2) return `${AYLAR[m1 - 1]}–${AYLAR[m2 - 1]} ${y1}`;
+    return `${AYLAR[m1 - 1]} ${y1} – ${AYLAR[m2 - 1]} ${y2}`;
+  }
+  return `${dateLabel(a)} – ${dateLabel(b)}`;
 }
 const shortDate = (v) => (isMonth(v) ? `${AYLAR[+v.slice(5, 7) - 1]} ${v.slice(2, 4)}` : dateLabel(v));
 // -12.33 → "−%12,33": Türkçede yüzde işareti sayıdan önce gelir
@@ -71,27 +91,33 @@ function setStatus(text, state = "idle") {
 }
 
 // ---------------------------------------------------------------- aşama göstergesi
-// idle | listening | thinking | tool | speaking: başlıktaki adım şeridi ve mikrofon dalgası bunu izler
+// idle | listening | thinking | tool | speaking: yazı kutusunun üstündeki durum satırı ve mikrofon dalgası bunu izler.
+// Her aşamada işi hangi ElevenLabs parçasının yaptığı da yazılır.
 let stage = "idle";
-const ORDER = ["listening", "thinking", "tool", "speaking"];
+const STAGE_TEXT = {
+  listening: ["Dinliyorum", "ElevenLabs Scribe konuşmanı yazıya döküyor"],
+  thinking: ["Düşünüyor", "ElevenLabs ajanı soruyu yorumluyor"],
+  tool: ["Veriye bakıyor", "Ajan veritabanında sorgu çalıştırıyor"],
+  speaking: ["Konuşuyor", "Eleven v4 Turbo · istersen araya girebilirsin"],
+};
+function idleText() {
+  return ["Hazır", conversation ? "Yaz ya da sesli sohbet için mikrofona bas" : "Mikrofona bas ya da sorunu yaz"];
+}
 function setStage(s) {
   stage = s;
   document.body.dataset.stage = s;
-  const at = ORDER.indexOf(s);
-  document.querySelectorAll(".pipeline li").forEach((li) => {
-    const i = ORDER.indexOf(li.dataset.step);
-    li.classList.toggle("active", i === at);
-    li.classList.toggle("done", at > 0 && i < at);
-    if (i === at) li.setAttribute("aria-current", "step"); else li.removeAttribute("aria-current");
-  });
+  const [b, t] = STAGE_TEXT[s] || idleText();
+  ui.stage.innerHTML = `<b>${b}</b><span>${t}</span>`;
 }
 
 function scrollToEnd() {
   ui.chatBody.scrollTop = ui.chatBody.scrollHeight;
 }
 
+let lastAi = null; // sözü kesilirse işaretlemek için son ajan mesajı
 function addMsg(role, text) {
   ui.transcript.querySelector(".hint")?.remove();
+  if (role === "user") headline = null; // yeni soru: önceki sorunun toplamı yeni grafiğe karışmasın
   const el = document.createElement("div");
   el.className = `msg ${role}`;
   // Ses modelinin duygu etiketlerini ([happy], [slow] gibi) ekranda gösterme
@@ -125,29 +151,26 @@ const clientTools = {
     setStage("tool");
     // Şema oturum boyunca değişmez; ajan tekrar isterse sunucuya gitmeden aynısını ver
     if (!schemaCache) {
-      const note = addMsg("tool", "Şema okunuyor…");
       const r = await api("/tools/get_schema");
-      if (!r.ok) { note.textContent = "Şema okunamadı"; note.classList.add("err"); return JSON.stringify(r); }
+      if (!r.ok) { addMsg("tool err", "Veritabanı şeması okunamadı"); return JSON.stringify(r); }
       schemaCache = r;
-      note.remove();
     }
-    if (!schemaNoted) { schemaNoted = true; addMsg("tool", `Şema okundu: ${schemaCache.tablolar.length} tablo`); }
     return JSON.stringify(schemaCache);
   },
 
   async run_query({ sql } = {}) {
     setStage("tool");
-    const note = addMsg("tool", "Sorgu çalışıyor…");
+    // Sorgu ayrıntıları sohbeti kalabalıklaştırmasın: satır sayısı ve süre sonuç panelinde görünür
     const r = await api("/tools/run_query", { sql: sql ?? "" });
     if (!r.ok) {
-      note.textContent = "Sorgu hata verdi, ajan düzeltiyor";
-      note.classList.add("err");
-      last = null;
+      last = null; // ajan hatayı okuyup sorguyu düzeltir
       return JSON.stringify(r);
     }
     const meta = `${nf.format(r.row_count)} satır${r.truncated ? " (sınırda kesildi)" : ""} · ${r.elapsed_ms} ms`;
     last = { columns: r.columns, rows: r.rows, chart: r.chart, sql: prettySql(r.sql), meta };
-    note.textContent = `Sorgu tamam: ${meta}`;
+    if (r.rows.length === 1 && r.rows[0].some((v) => typeof v === "number")) {
+      headline = { columns: r.columns, rows: r.rows, at: Date.now() };
+    }
     const { chart, ...forLlm } = r;
     if (r.rows.length > LLM_ROW_LIMIT) {
       forLlm.rows = r.rows.slice(0, LLM_ROW_LIMIT);
@@ -158,22 +181,19 @@ const clientTools = {
   },
 
   async analyze_trend(params = {}) {
+    headline = null;
     setStage("tool");
-    const note = addMsg("tool", "Trend analizi yapılıyor…");
     const r = await api("/tools/analyze_trend", params);
     if (!r.ok) {
-      note.textContent = "Trend analizi hata verdi";
-      note.classList.add("err");
       last = null;
       return JSON.stringify(r);
     }
     const genel = pct(r.degisim_yuzde);
-    note.textContent = `Trend analizi tamam: genel değişim ${genel}`;
     // En belirgin boyutun kırılımını grafiğe hazırla
     const boyut = r.en_belirgin_kirilim?.boyut;
     if (!boyut) { last = null; return JSON.stringify(r); }
-    const a = `${dateLabel(r.donem_a.baslangic)} – ${dateLabel(r.donem_a.bitis)}`;
-    const b = `${dateLabel(r.donem_b.baslangic)} – ${dateLabel(r.donem_b.bitis)}`;
+    const a = periodLabel(r.donem_a.baslangic, r.donem_a.bitis);
+    const b = periodLabel(r.donem_b.baslangic, r.donem_b.bitis);
     const rows = (r.kirilimlar[boyut] || []).map((k) => [k.grup, k.donem_a, k.donem_b, k.degisim_yuzde]);
     const BOYUT_AD = { kategori: "Kategori", sehir: "Şehir", odeme_turu: "Ödeme türü", kargo_firmasi: "Kargo firması", marka: "Marka" };
     last = {
@@ -196,7 +216,13 @@ const clientTools = {
       const ys = (Array.isArray(y) ? y : String(y).split(",")).map((s) => s.trim()).filter((c) => last.columns.includes(c));
       if (ys.length) spec.y = ys;
     }
-    addResult({ data: last, spec, title: title || last.title || "Sonuç" });
+    const snap = { data: last, spec, title: title || last.title || "Sonuç" };
+    // Döküm grafiğinden hemen önce tek sayılık bir toplam sorgulandıysa onu grafiğin üstüne koy
+    if (spec.type !== "kpi" && headline && headline.rows !== last.rows && Date.now() - headline.at < HEADLINE_MS) {
+      snap.headline = headline;
+    }
+    headline = null;
+    addResult(snap);
     return "Grafik hazırlandı; kullanıcı sohbetteki 'Grafik hazır' butonuyla sağ panelde açabilir.";
   },
 };
@@ -238,50 +264,92 @@ function thumb(spec, data) {
   }).join("")}</svg>`;
 }
 
+// Geniş ekranda sonuç paneli sağda sabit durur; dar ekranda sohbetin içine, açılan kartın altına taşınır.
+const results = [];
+const narrow = matchMedia("(max-width: 980px)");
+
 function addResult(snap) {
+  snap.n = results.length + 1;
+  results.push(snap);
+
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "result-btn";
   btn.innerHTML = `<span class="thumb">${thumb(snap.spec, snap.data)}</span>
-    <span class="txt"><b>${KIND[snap.spec.type] || KIND.bar}</b><small></small></span><span class="go">Aç →</span>`;
+    <span class="txt"><b>${KIND[snap.spec.type] || KIND.bar}</b><small></small></span><span class="go">Göster →</span>`;
   btn.querySelector("small").textContent = snap.title;
-  btn.addEventListener("click", () => openResult(snap, btn));
+  btn.addEventListener("click", () => openResult(snap));
+  snap.btn = btn;
   ui.transcript.append(btn);
+
+  const h = document.createElement("button");
+  h.type = "button";
+  h.className = "hist";
+  h.title = snap.title;
+  h.innerHTML = `<i>${snap.n}</i>`;
+  h.append(snap.title);
+  h.addEventListener("click", () => openResult(snap));
+  snap.hist = h;
+  ui.history.append(h);
+  ui.history.hidden = results.length < 2;
+
+  // En yeni sonuç kendiliğinden açılır: ekran boş kalmasın
+  openResult(snap, { auto: true });
   scrollToEnd();
 }
 
-let lastOpener = null;
-function openResult(snap, btn) {
-  const wasOpen = document.body.classList.contains("drawer-open");
-  document.querySelectorAll(".result-btn.active").forEach((b) => b.classList.remove("active"));
-  btn?.classList.add("active");
-  lastOpener = btn;
+function placePanel() {
+  if (narrow.matches && shown) {
+    if (ui.panel.previousElementSibling !== shown.btn) shown.btn.after(ui.panel);
+  } else if (ui.panel.parentElement !== ui.panelHome) {
+    ui.panelHome.append(ui.panel);
+  }
+}
+
+function openResult(snap, { auto = false } = {}) {
   shown = snap;
-  ui.drawer.inert = false;
-  document.body.classList.add("drawer-open");
+  for (const r of results) {
+    r.btn.classList.toggle("active", r === snap);
+    r.hist.setAttribute("aria-current", String(r === snap));
+  }
+  placePanel();
+  ui.panelEmpty.hidden = true;
+  ui.panelBody.hidden = false;
   ui.chartTitle.textContent = snap.title;
   ui.sqlMeta.textContent = snap.data.meta || "";
   ui.sqlBox.firstElementChild.textContent = snap.data.sql || "";
   renderTable(snap.data);
   setView("chart");
   ui.chart.innerHTML = "";
-  // panel açılma animasyonu bitince çiz ki Plotly doğru genişliği alsın
-  setTimeout(() => {
+  snap.hist.scrollIntoView({ block: "nearest", inline: "nearest" });
+  // Panel yerleşip boyut alınca çiz ki Plotly doğru genişliği kullansın
+  requestAnimationFrame(() => {
     if (shown !== snap) return; // bu arada başka bir sonuç açıldı
-    try { renderChart(snap.spec, snap.data); } catch (e) { console.error(e); setView("table"); }
-  }, wasOpen ? 0 : 320);
-  ui.chartTitle.focus({ preventScroll: true });
+    try { renderChart(snap.spec, snap.data, snap.headline); } catch (e) { console.error(e); setView("table"); }
+  });
+  if (!auto) {
+    ui.chartTitle.focus({ preventScroll: true });
+    if (narrow.matches) ui.panel.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
 }
 
-function closeDrawer() {
-  if (!document.body.classList.contains("drawer-open")) return;
-  document.body.classList.remove("drawer-open");
-  ui.drawer.inert = true;
-  document.querySelectorAll(".result-btn.active").forEach((b) => b.classList.remove("active"));
-  if (lastOpener?.isConnected) lastOpener.focus({ preventScroll: true });
+// Yalnızca dar ekranda: sohbetin içindeki paneli kapat
+function closePanel() {
+  if (!narrow.matches || !shown) return;
+  const btn = shown.btn;
+  shown = null;
+  for (const r of results) r.btn.classList.remove("active");
+  ui.panelHome.append(ui.panel);
+  if (btn?.isConnected) btn.focus({ preventScroll: true });
 }
-ui.drawerClose.addEventListener("click", closeDrawer);
-document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
+ui.panelClose.addEventListener("click", closePanel);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closePanel(); });
+narrow.addEventListener("change", () => {
+  if (narrow.matches) { placePanel(); return; }
+  // Genişe dönünce panel sağa geri gelir; kapatılmışsa son sonucu yeniden aç
+  const snap = shown || results[results.length - 1];
+  if (snap) openResult(snap, { auto: true }); else placePanel();
+});
 
 ui.copySql.addEventListener("click", async () => {
   try {
@@ -298,7 +366,6 @@ function showScreen(name) {
   document.body.dataset.screen = name;
   ui.landing.hidden = name !== "landing";
   ui.chat.hidden = name !== "chat";
-  if (name === "landing") closeDrawer();
   window.scrollTo(0, 0);
 }
 
@@ -306,7 +373,14 @@ function showScreen(name) {
 const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 const series = () => [1, 2, 3, 4, 5, 6, 7, 8].map((i) => cssVar(`--s${i}`));
 
-function renderChart(spec, data) {
+// Grafiğin üstündeki toplam: tek satırlık sonucun sayı kolonları (ör. "10.009.483,95 TL · Ciro")
+function headlineHtml(h) {
+  const nums = h.columns.map((c, i) => [c, h.rows[0][i]]).filter(([, v]) => typeof v === "number");
+  return `<div class="chart-head">${nums.map(([c, v]) =>
+    `<div class="big"><strong>${esc(fmtCell(v, c))}${MONEY_COL.test(c) ? "<small>TL</small>" : ""}</strong><span>${esc(prettyCol(c))}</span></div>`).join("")}</div>`;
+}
+
+function renderChart(spec, data, head = null) {
   const { columns, rows } = data;
   const col = (name) => columns.indexOf(name);
   ui.chart.innerHTML = "";
@@ -327,6 +401,10 @@ function renderChart(spec, data) {
   // x verilmemişse ilk metin kolonunu kullan (ör. ajan kpi önerisini "bar" ile ezdiyse)
   if (!spec.x || col(spec.x) < 0) spec = { ...spec, x: columns.find((_, i) => typeof rows[0][i] !== "number") };
   if (spec.type === "table" || !spec.x || !spec.y?.length || !window.Plotly) { setView("table"); return; }
+
+  // Plotly kendi kutusuna çizer; üstte toplam varsa ikisi alt alta durur
+  ui.chart.innerHTML = `${head ? headlineHtml(head) : ""}<div class="plot"></div>`;
+  const plotEl = ui.chart.querySelector(".plot");
 
   const pal = series();
   const xs = rows.map((r) => r[col(spec.x)]);
@@ -377,7 +455,7 @@ function renderChart(spec, data) {
   const ink2 = cssVar("--ink-2"), rule = cssVar("--rule"), ink = cssVar("--ink");
   const valueAxis = { gridcolor: rule, zerolinecolor: cssVar("--rule-strong"), tickformat: "~s", automargin: true, tickfont: { family: cssVar("--mono"), size: 11 } };
   const catAxis = { type: "category", automargin: true, showgrid: false, linecolor: cssVar("--rule-strong"), tickfont: { size: 12 } };
-  Plotly.newPlot(ui.chart, traces, {
+  Plotly.newPlot(plotEl, traces, {
     margin: { t: 8, r: 8, b: 8, l: 8 },
     paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
     font: { color: ink2, family: cssVar("--sans"), size: 12 },
@@ -408,7 +486,7 @@ function setView(v) {
   ui.table.hidden = v !== "table";
   ui.sqlView.hidden = v !== "sql";
   document.querySelectorAll(".tab").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.view === v)));
-  if (v === "chart" && window.Plotly && ui.chart.querySelector(".js-plotly-plot, .plot-container")) Plotly.Plots.resize(ui.chart);
+  if (v === "chart" && window.Plotly && ui.chart.querySelector(".js-plotly-plot")) Plotly.Plots.resize(ui.chart.querySelector(".js-plotly-plot"));
 }
 document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => setView(t.dataset.view)));
 setView("chart");
@@ -436,7 +514,10 @@ async function openSession(textOnly) {
     ...auth,
     textOnly,
     clientTools,
-    onConnect: () => setStatus(textOnly ? "Bağlı · yazılı" : "Bağlı · sesli", "connected"),
+    onConnect: () => {
+      setStatus(textOnly ? "Bağlı · yazılı" : "Bağlı · sesli", "connected");
+      if (stage === "idle") setStage("idle");
+    },
     onDisconnect: () => {
       if (conversation !== conv && conversation !== null) return; // eski oturumun geç gelen kapanışı
       conversation = null; setVoiceUi(false); setStatus("Bağlı değil"); setStage("idle");
@@ -444,9 +525,15 @@ async function openSession(textOnly) {
     onError: (m) => { setStatus("Hata", "error"); addMsg("tool err", `Hata: ${errText(m)}`); },
     onMessage: ({ message, role, source }) => {
       const who = (role || source) === "user" ? "user" : "ai";
-      addMsg(who, message);
+      const el = addMsg(who, message);
+      if (who === "ai") lastAi = el;
       if (who === "user") setStage("thinking");
       else if (!voiceMode) setStage("idle"); // sesli modda konuşma bitince onModeChange dinlemeye döndürür
+    },
+    // Kullanıcı ajanın sözünü keserse ElevenLabs konuşmayı durdurur; bunu mesajın yanında göster
+    onInterruption: () => {
+      lastAi?.classList.add("cut");
+      if (voiceMode) setStage("listening");
     },
     onModeChange: ({ mode }) => {
       if (mode === "speaking") setStage("speaking");
@@ -501,6 +588,10 @@ async function toggleVoice() {
 ui.mic.addEventListener("click", toggleVoice);
 ui.startVoice.addEventListener("click", () => { showScreen("chat"); toggleVoice(); });
 ui.startText.addEventListener("click", () => { showScreen("chat"); ui.input.focus(); });
+document.querySelectorAll(".ask").forEach((b) => b.addEventListener("click", () => {
+  showScreen("chat");
+  sendText(b.textContent);
+}));
 ui.home.addEventListener("click", async () => {
   await endConversation();
   setVoiceUi(false);
@@ -594,7 +685,7 @@ function drawHero(rows, animate = true) {
   svg += "</svg>";
   box.innerHTML = svg;
   box.setAttribute("aria-label", `Aylık ciro, ${dateLabel(rows[0][0])} ile ${dateLabel(rows[n - 1][0])} arası. En yüksek ay ${dateLabel(rows[peak][0])}: ${compact(rows[peak][1])} TL.`);
-  ui.heroRange.textContent = `${dateLabel(rows[0][0])} – ${dateLabel(rows[n - 1][0])}`;
+  ui.heroNote.textContent = `En yüksek ay ${longMonth(rows[peak][0])}: ${spoken(rows[peak][1])} TL. Grafik, ${longMonth(rows[0][0])} – ${longMonth(rows[n - 1][0])} verisinden canlı çiziliyor.`;
   if (animate) requestAnimationFrame(() => box.classList.add("ready"));
 
   // Üzerine gelince ay ve tutar: SVG ölçeklendiği için konumu sütunun ekrandaki yerinden al
@@ -617,21 +708,13 @@ function drawHeroPlaceholder() {
   ui.heroBars.classList.add("empty");
   ui.heroBars.innerHTML = `<svg width="100%" height="100%" aria-hidden="true"><line class="base" x1="0" x2="100%" y1="85%" y2="85%"/></svg>`;
   ui.heroBars.setAttribute("aria-label", "Grafik için sunucuya ulaşılamadı");
-  $("hero-note").textContent = "Sunucuya ulaşılamadı. Uygulamayı uvicorn ile başlattığından emin ol.";
+  ui.heroNote.textContent = "Sunucuya ulaşılamadı. Uygulamayı uvicorn ile başlattığından emin ol.";
 }
 
 async function loadLanding() {
   const [q, s] = await Promise.all([api("/tools/run_query", { sql: HERO_SQL }), api("/tools/get_schema")]);
   if (q.ok && q.rows.length) drawHero(q.rows); else drawHeroPlaceholder();
-  if (s.ok) {
-    schemaCache = s;
-    const n = Object.fromEntries(s.tablolar.map((t) => [t.tablo, t.satir_sayisi]));
-    for (const dd of document.querySelectorAll("[data-fact]")) {
-      const k = dd.dataset.fact;
-      const v = k === "sehir" ? s.olasi_degerler?.["musteriler.sehir"]?.length : n[k];
-      if (v != null) dd.textContent = nf.format(v);
-    }
-  }
+  if (s.ok) schemaCache = s;
 }
 loadLanding();
 // Pencere boyutu değişince giriş grafiğini yeni genişlikte yeniden çiz (animasyonsuz)

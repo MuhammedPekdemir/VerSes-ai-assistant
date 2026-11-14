@@ -3,12 +3,12 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>VerSes · Sesli veri analisti</title>
-  <meta name="description" content="Türkçe konuşarak e-ticaret verisine soru sor; VerSes SQL'i yazar, çalıştırır, cevabı sesle anlatır ve grafiğini çizer.">
+  <title>VerSes · Satış verine sesli soru sor</title>
+  <meta name="description" content="Satış verine Türkçe konuşarak soru sor. VerSes, ElevenLabs Agents ile seni dinler, veritabanından cevabı bulur, sesli anlatır ve grafiğini gösterir.">
   <meta name="color-scheme" content="light dark">
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a1915'/%3E%3Crect x='7' y='14' width='3' height='9' rx='1.5' fill='%23f3f0e8'/%3E%3Crect x='12.5' y='9' width='3' height='14' rx='1.5' fill='%23f3f0e8'/%3E%3Crect x='18' y='12' width='3' height='11' rx='1.5' fill='%23f3f0e8'/%3E%3Crect x='23.5' y='6' width='3' height='17' rx='1.5' fill='%23e8643a'/%3E%3C/svg%3E">
-  <link rel="preload" href="vendor/fonts/newsreader-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2318181b'/%3E%3Crect x='7' y='13' width='3' height='9' rx='1.5' fill='%23fff'/%3E%3Crect x='12.5' y='8' width='3' height='16' rx='1.5' fill='%23fff'/%3E%3Crect x='18' y='11' width='3' height='11' rx='1.5' fill='%23fff'/%3E%3Crect x='23.5' y='14' width='3' height='6' rx='1.5' fill='%23fff'/%3E%3C/svg%3E">
   <link rel="preload" href="vendor/fonts/ibm-plex-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="vendor/fonts/ibm-plex-sans-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="style.css">
   <script src="vendor/plotly-2.35.2.min.js" defer></script>
 </head>
@@ -17,134 +17,213 @@
   <!-- ============================================================ giriş -->
   <div id="landing" class="landing">
     <header class="topbar">
-      <a class="wordmark" href="./" aria-label="VerSes ana sayfa">Ver<em>Ses</em></a>
-      <a class="toplink" href="https://github.com/MuhammedPekdemir/VerSes-ai-assistant" target="_blank" rel="noopener">Kaynak kodu <span aria-hidden="true">↗</span></a>
+      <a class="wordmark" href="./" aria-label="VerSes ana sayfa">VerSes</a>
+      <nav class="toplinks" aria-label="Sayfa">
+        <a href="#elevenlabs">Nasıl konuşuyor?</a>
+        <a href="#ornekler">Örnek sorular</a>
+        <a href="https://github.com/MuhammedPekdemir/VerSes-ai-assistant" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a>
+      </nav>
     </header>
 
-    <main class="hero">
-      <div class="hero-copy">
-        <p class="kicker">Türkçe konuşan veri analisti</p>
-        <h1>Satış verine sor, cevabı <em>sesle</em> al.</h1>
-        <p class="lede">
-          VerSes bir e-ticaret şirketinin satış veritabanını tanır. Sorunu söylersin; sorguyu kendisi yazar,
-          veritabanında çalıştırır, sonucu kısaca anlatır ve grafiğini çizer.
-        </p>
-        <div class="cta">
-          <button id="start-voice" class="btn btn-primary" type="button">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg>
-            Konuşmaya başla
-          </button>
-          <button id="start-text" class="btn btn-quiet" type="button">Yazarak sor</button>
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <h1>Satış verine sesli soru sor.</h1>
+          <p class="lede">
+            Ciroyu, siparişleri ya da kargo gecikmelerini merak ettiğinde rapor beklemene gerek yok.
+            Sorunu Türkçe söyle ya da yaz; VerSes cevabı veritabanından bulur, birkaç cümleyle sesli
+            anlatır ve grafiğini ekrana getirir.
+          </p>
+          <div class="cta">
+            <button id="start-voice" class="btn btn-primary" type="button">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg>
+              Sesli sor
+            </button>
+            <button id="start-text" class="btn btn-quiet" type="button">Yazarak sor</button>
+          </div>
+          <p class="cta-note">Sesli sohbet <a href="#elevenlabs">ElevenLabs Agents</a> ile çalışır: Scribe seni dinler, Eleven v4 Turbo cevabı seslendirir. Tarayıcı bir kez mikrofon izni ister.</p>
         </div>
-      </div>
 
-      <figure class="hero-chart" aria-labelledby="hero-caption">
-        <figcaption id="hero-caption">
-          <span>Aylık ciro</span>
-          <span id="hero-range" class="muted">Oca 2025 – Eki 2026</span>
-        </figcaption>
-        <div id="hero-bars" class="hero-bars" role="img" aria-label="Aylık ciro grafiği yükleniyor"></div>
-        <p id="hero-note" class="hero-note">Grafik, uygulamanın sorguladığı veritabanından canlı çizilir.</p>
-      </figure>
+        <figure class="sample" aria-labelledby="sample-q">
+          <figcaption>
+            <span class="sample-label">Örnek soru</span>
+            <span id="sample-q" class="sample-q">“Aylara göre ciro nasıl değişti?”</span>
+          </figcaption>
+          <div id="hero-bars" class="hero-bars" role="img" aria-label="Aylık ciro grafiği yükleniyor"></div>
+          <p id="hero-note" class="sample-note">Grafik, VerSes'in sorguladığı veritabanından canlı çiziliyor.</p>
+        </figure>
+      </section>
+
+      <section id="elevenlabs" class="voice" aria-labelledby="voice-title">
+        <div class="section-head">
+          <h2 id="voice-title">Sesli sohbetin arkasında ElevenLabs var</h2>
+          <p>
+            VerSes'in dinlemesi, sırasını beklemesi, veriye bakması ve konuşması ElevenLabs Agents üzerinde çalışır.
+            Senin yapman gereken tek şey konuşmak.
+          </p>
+        </div>
+
+        <ol class="flow" aria-label="Bir sorunun yolu">
+          <li><b>Sen konuşursun</b><span>Mikrofon</span></li>
+          <li><b>Yazıya döker</b><span>Scribe Realtime</span></li>
+          <li><b>Veriye bakar</b><span>Agents · araçlar</span></li>
+          <li><b>Sesli anlatır</b><span>Eleven v4 Turbo</span></li>
+        </ol>
+
+        <dl class="features">
+          <div>
+            <dt>Seni anlar <span>Scribe Realtime</span></dt>
+            <dd>Türkçe konuşmanı gerçek zamanlı olarak yazıya döker. Neyin anlaşıldığını sohbet akışında görürsün.</dd>
+          </div>
+          <div>
+            <dt>Doğal bir sesle cevap verir <span>Eleven v4 Turbo</span></dt>
+            <dd>Cevaplar Türkçe bir sesle, kısa ve akıcı okunur. Sayıları "yaklaşık 10 milyon lira" gibi kulağa doğal gelen biçimde söyler.</dd>
+          </div>
+          <div>
+            <dt>Sözünü kesebilirsin <span>Sıra alma modeli</span></dt>
+            <dd>Ne zaman sustuğunu anlar, sen düşünürken araya girmez. O konuşurken sen söze girersen susar ve seni dinler.</dd>
+          </div>
+          <div>
+            <dt>Veriye kendisi bakar <span>Agents · client tools</span></dt>
+            <dd>Ajan dört aracı kullanır: tabloları tanır, sorguyu çalıştırır, bir değişimin sebebini arar ve grafiği açar. Sayı uydurmaz; her rakam veritabanından gelir.</dd>
+          </div>
+        </dl>
+      </section>
+      <section id="ornekler" class="asks" aria-labelledby="asks-title">
+        <div class="section-head">
+          <h2 id="asks-title">Neler sorabilirsin?</h2>
+          <p>Bir soruya tıkla, VerSes hemen cevaplasın. Kendi sorunu da sorabilirsin; veriler Ocak 2025 ile Ekim 2026 arasını kapsıyor.</p>
+        </div>
+        <div class="ask-groups">
+          <div class="ask-group">
+            <h3>Satış ve ciro</h3>
+            <ul>
+              <li><button class="ask" type="button">Geçen ay ciro ne kadardı?</button></li>
+              <li><button class="ask" type="button">Bu yıl en çok ciro yapan kategori hangisi?</button></li>
+              <li><button class="ask" type="button">Haziranda satışlar neden düştü?</button></li>
+            </ul>
+          </div>
+          <div class="ask-group">
+            <h3>Müşteriler</h3>
+            <ul>
+              <li><button class="ask" type="button">En çok sipariş hangi şehirden geliyor?</button></li>
+              <li><button class="ask" type="button">2026'da ortalama sepet tutarı ne kadar?</button></li>
+              <li><button class="ask" type="button">Siparişlerin yüzde kaçı kredi kartıyla ödeniyor?</button></li>
+            </ul>
+          </div>
+          <div class="ask-group">
+            <h3>Kargo ve teslimat</h3>
+            <ul>
+              <li><button class="ask" type="button">Ortalama teslim süresi kaç gün?</button></li>
+              <li><button class="ask" type="button">Mart 2026'da teslimat en çok hangi şehirde gecikti?</button></li>
+              <li><button class="ask" type="button">En çok hangi kargo firmasıyla gönderiyoruz?</button></li>
+            </ul>
+          </div>
+          <div class="ask-group">
+            <h3>İadeler</h3>
+            <ul>
+              <li><button class="ask" type="button">Genel iade oranımız yüzde kaç?</button></li>
+              <li><button class="ask" type="button">Müşteriler en çok hangi nedenle iade ediyor?</button></li>
+              <li><button class="ask" type="button">Hangi kategoride iade oranı en yüksek?</button></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
     </main>
 
-    <dl class="facts">
-      <div><dt>Sipariş</dt><dd data-fact="siparisler">30.090</dd></div>
-      <div><dt>Müşteri</dt><dd data-fact="musteriler">5.000</dd></div>
-      <div><dt>Ürün</dt><dd data-fact="urunler">300</dd></div>
-      <div><dt>İl</dt><dd data-fact="sehir">20</dd></div>
-    </dl>
-
-    <section class="how" aria-labelledby="how-title">
-      <h2 id="how-title">Bir soru nasıl cevaplanır</h2>
-      <ol>
-        <li>
-          <h3><span>1</span>Dinler</h3>
-          <p>ElevenLabs Scribe Türkçe konuşmanı anında yazıya çevirir. Mikrofon yoksa soruyu yazabilirsin.</p>
-        </li>
-        <li>
-          <h3><span>2</span>Sorgular</h3>
-          <p>Ajan önce şemayı okur, sonra tek bir SELECT yazar. Sorgu salt-okunur bağlantıda, en fazla 500 satır ve 5 saniyeyle çalışır.</p>
-        </li>
-        <li>
-          <h3><span>3</span>Anlatır</h3>
-          <p>Cevabı iki üç cümleyle sesli söyler. Grafik, tablo ve çalışan SQL yan panelde açılır.</p>
-        </li>
-      </ol>
-    </section>
-
     <footer class="foot">
-      <p>Veri seti sentetiktir: Ocak 2025 – Ekim 2026 arası, gerçekçi mevsimsellik ve üç gömülü olayla üretildi.</p>
+      <p>VerSes bir portföy projesidir. Veriler gerçek değildir; Ocak 2025 – Ekim 2026 dönemi için üretilmiş örnek bir e-ticaret veri setidir.</p>
       <p class="muted">ElevenLabs Agents · FastAPI · SQLite · Plotly</p>
     </footer>
   </div>
 
-  <!-- ============================================================ sohbet -->
-  <div id="chat" class="chat" hidden>
-    <header class="chat-head">
-      <button id="home" class="wordmark" type="button" aria-label="Giriş sayfasına dön">Ver<em>Ses</em></button>
-      <ol class="pipeline" aria-label="Ajanın şu anki adımı">
-        <li data-step="listening">Dinliyor</li>
-        <li data-step="thinking">Düşünüyor</li>
-        <li data-step="tool">Veriye bakıyor</li>
-        <li data-step="speaking">Konuşuyor</li>
-      </ol>
-      <span id="status" class="status" data-state="idle" role="status">Bağlı değil</span>
+  <!-- ============================================================ analiz -->
+  <div id="chat" class="app" hidden>
+    <header class="app-head">
+      <button id="home" class="wordmark" type="button" aria-label="Giriş sayfasına dön">VerSes</button>
+      <div class="conn">
+        <span class="conn-by">ElevenLabs Agents</span>
+        <span id="status" class="status" data-state="idle" role="status">Bağlı değil</span>
+      </div>
     </header>
 
-    <div class="chat-body">
-      <div id="transcript" class="transcript" aria-live="polite">
-        <div class="hint">
-          <h2>Ne öğrenmek istersin?</h2>
-          <p>Bir örneğe tıkla, kendi sorunu yaz ya da mikrofona bas.</p>
-          <ul class="examples">
-            <li><button class="chip" type="button">Geçen ay ciro ne kadardı?</button></li>
-            <li><button class="chip" type="button">Bu yıl kategorilere göre aylık satışları göster</button></li>
-            <li><button class="chip" type="button">Haziranda Elektronik satışları neden düştü?</button></li>
-            <li><button class="chip" type="button">Mart 2026'da hangi şehirde teslimat gecikti?</button></li>
-            <li><button class="chip" type="button">Black Friday haftasında günlük sipariş kaç kat arttı?</button></li>
-          </ul>
+    <div class="app-main">
+      <section class="convo" aria-label="Sohbet">
+        <div class="chat-body">
+          <div id="transcript" class="transcript" aria-live="polite">
+            <div class="hint">
+              <h2>Ne öğrenmek istersin?</h2>
+              <p>Bir örneğe tıkla, sorunu yaz ya da mikrofona basıp konuş.</p>
+              <ul class="examples">
+                <li><button class="chip" type="button">Geçen ay ciro ne kadardı?</button></li>
+                <li><button class="chip" type="button">Bu yıl kategorilere göre aylık satışları göster</button></li>
+                <li><button class="chip" type="button">Haziranda Elektronik satışları neden düştü?</button></li>
+                <li><button class="chip" type="button">Mart 2026'da hangi şehirde teslimat gecikti?</button></li>
+                <li><button class="chip" type="button">Black Friday haftasında günlük sipariş kaç kat arttı?</button></li>
+              </ul>
+            </div>
+          </div>
         </div>
-      </div>
-    </div>
 
-    <div class="composer">
-      <button id="mic" class="mic" type="button" aria-label="Sesli konuşmayı başlat" aria-pressed="false">
-        <canvas class="wave" width="96" height="96" aria-hidden="true"></canvas>
-        <svg class="mic-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg>
-      </button>
-      <form id="text-form" class="text-form">
-        <input id="text-input" type="text" placeholder="Sorunu yaz…" autocomplete="off" aria-label="Soru yaz" maxlength="500">
-        <button type="submit" aria-label="Gönder">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11h12.17l-5.59-5.59L12 4l8 8-8 8-1.41-1.41L16.17 13H4v-2Z"/></svg>
-        </button>
-      </form>
+        <div class="composer">
+          <p id="stage" class="stage" aria-live="polite"><b>Hazır</b><span>Konuşmak için mikrofona bas ya da yaz</span></p>
+          <div class="composer-row">
+            <button id="mic" class="mic" type="button" aria-label="Sesli konuşmayı başlat" aria-pressed="false">
+              <canvas class="wave" width="104" height="104" aria-hidden="true"></canvas>
+              <svg class="mic-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg>
+            </button>
+            <form id="text-form" class="text-form">
+              <input id="text-input" type="text" placeholder="Sorunu yaz…" autocomplete="off" aria-label="Soru yaz" maxlength="500">
+              <button type="submit" aria-label="Gönder">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11h12.17l-5.59-5.59L12 4l8 8-8 8-1.41-1.41L16.17 13H4v-2Z"/></svg>
+              </button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <aside id="panel-home" class="panel-home" aria-label="Sonuçlar">
+        <section id="panel" class="panel" aria-labelledby="chart-title">
+          <div id="panel-empty" class="panel-empty">
+            <svg viewBox="0 0 120 64" aria-hidden="true">
+              <line x1="0" x2="120" y1="63.5" y2="63.5"/>
+              <rect x="6" y="38" width="14" height="25" rx="2"/><rect x="28" y="26" width="14" height="37" rx="2"/>
+              <rect x="50" y="32" width="14" height="31" rx="2"/><rect x="72" y="14" width="14" height="49" rx="2"/>
+              <rect x="94" y="22" width="14" height="41" rx="2"/>
+            </svg>
+            <h2>Sonuçlar burada açılır</h2>
+            <p>Bir soru sorduğunda grafik, tablo ve çalışan sorgu bu alanda görünür. Önceki sonuçlara üstteki listeden dönebilirsin.</p>
+          </div>
+
+          <div id="panel-body" class="panel-body" hidden>
+            <nav id="history" class="history" aria-label="Önceki sonuçlar" hidden></nav>
+            <header class="panel-head">
+              <div>
+                <h2 id="chart-title" tabindex="-1">Sonuç</h2>
+                <p id="sql-meta" class="meta"></p>
+              </div>
+              <button id="panel-close" class="icon-btn" type="button" aria-label="Sonucu kapat">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4 6.4 5Z"/></svg>
+              </button>
+            </header>
+            <div class="tabs" role="tablist" aria-label="Görünüm">
+              <button class="tab" type="button" role="tab" data-view="chart" aria-controls="chart">Grafik</button>
+              <button class="tab" type="button" role="tab" data-view="table" aria-controls="table">Tablo</button>
+              <button class="tab" type="button" role="tab" data-view="sql" aria-controls="sql">Sorgu</button>
+            </div>
+            <div id="chart" class="chart" role="tabpanel" aria-label="Grafik"></div>
+            <div id="table" class="table-wrap" role="tabpanel" aria-label="Tablo" hidden></div>
+            <div id="sql" class="sql-wrap" role="tabpanel" aria-label="Sorgu" hidden>
+              <p class="sql-note">VerSes'in bu cevap için veritabanında çalıştırdığı sorgu:</p>
+              <pre id="sql-box"><code>Henüz sorgu yok.</code></pre>
+              <button id="copy-sql" class="btn btn-quiet btn-sm" type="button">Kopyala</button>
+            </div>
+          </div>
+        </section>
+      </aside>
     </div>
   </div>
-
-  <!-- ============================================================ sonuç paneli -->
-  <aside id="drawer" class="drawer" aria-labelledby="chart-title" inert>
-    <header class="drawer-head">
-      <div>
-        <h2 id="chart-title" tabindex="-1">Sonuç</h2>
-        <p id="sql-meta" class="meta"></p>
-      </div>
-      <button id="drawer-close" class="icon-btn" type="button" aria-label="Paneli kapat">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4 6.4 5Z"/></svg>
-      </button>
-    </header>
-    <div class="tabs" role="tablist" aria-label="Görünüm">
-      <button class="tab" type="button" role="tab" data-view="chart" aria-controls="chart">Grafik</button>
-      <button class="tab" type="button" role="tab" data-view="table" aria-controls="table">Tablo</button>
-      <button class="tab" type="button" role="tab" data-view="sql" aria-controls="sql">SQL</button>
-    </div>
-    <div id="chart" class="chart" role="tabpanel" aria-label="Grafik"></div>
-    <div id="table" class="table-wrap" role="tabpanel" aria-label="Tablo" hidden></div>
-    <div id="sql" class="sql-wrap" role="tabpanel" aria-label="SQL" hidden>
-      <pre id="sql-box"><code>Henüz sorgu yok.</code></pre>
-      <button id="copy-sql" class="btn btn-quiet btn-sm" type="button">Kopyala</button>
-    </div>
-  </aside>
 
   <script type="module" src="app.js"></script>
 </body>
