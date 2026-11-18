@@ -152,3 +152,20 @@ def test_env_okuyucu_bom_ve_tirnak(tmp_path, monkeypatch):
     _env_yukle(f)
     import os
     assert os.environ["VERSES_TEST_A"] == "tirnakli" and os.environ["VERSES_TEST_B"] == "duz"
+
+
+def test_teslim_suresi_siparis_basina_hesaplanir():
+    # Çok ürünlü siparişler fazla sayılmamalı: sonuç doğrudan siparisler tablosundaki ortalamaya eşit
+    import sqlite3
+    con = sqlite3.connect(DB)
+    beklenen = con.execute(
+        "SELECT AVG(julianday(teslim_tarihi) - julianday(siparis_tarihi)) FROM siparisler "
+        "WHERE durum != 'İptal Edildi' AND siparis_tarihi BETWEEN '2026-03-01' AND '2026-03-31'").fetchone()[0]
+    con.close()
+    r = tools.analyze_trend(DB, "ort_teslim_gun", "2026-02-01", "2026-02-28", "2026-03-01", "2026-03-31")
+    assert r["donem_b"]["deger"] == pytest.approx(beklenen, abs=1e-3)
+
+
+def test_ciro_kargo_haric_etiketlenir():
+    r = tools.analyze_trend(DB, "ciro", "2026-05-01", "2026-05-31", "2026-06-01", "2026-06-30", dimension="kategori")
+    assert "kargo hariç" in r["metrik_etiketi"] and "not" in r

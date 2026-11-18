@@ -93,12 +93,17 @@ def run_query(db_path: Path, sql: str, max_rows: int = 500, timeout_s: float = 5
 # SQL burada sabit şablonlardan üretilir; kullanıcı girdisi yalnızca parametre olarak geçer.
 # ---------------------------------------------------------------------------
 METRIKLER = {
-    "ciro": ("Ciro (TL)", "SUM(k.tutar_tl)"),
+    # Kırılımlar ürün düzeyinde olduğu için ciro burada kargo hariç ürün satışıdır
+    # (siparisler.toplam_tutar_tl kargo dahildir; bu yüzden toplam ondan biraz düşük çıkar).
+    "ciro": ("Ürün cirosu, kargo hariç (TL)", "SUM(k.tutar_tl)"),
     "siparis_sayisi": ("Sipariş sayısı", "COUNT(DISTINCT s.siparis_id)"),
     "satis_adedi": ("Satış adedi", "SUM(k.adet)"),
     "iade_orani": ("İade oranı", "CAST(COUNT(i.iade_id) AS REAL) / COUNT(k.kalem_id)"),
+    # Satırlar kalem düzeyinde; her kalemi 1/n ağırlıkla sayınca çok ürünlü sipariş fazla sayılmaz,
+    # toplamda ve sipariş düzeyindeki boyutlarda (şehir, kargo...) sonuç sipariş başına ortalamadır.
     "ort_teslim_gun": ("Ortalama teslim süresi (gün)",
-                       "AVG(julianday(s.teslim_tarihi) - julianday(s.siparis_tarihi))"),
+                       "SUM((julianday(s.teslim_tarihi) - julianday(s.siparis_tarihi)) / kn.n)"
+                       " / SUM(CASE WHEN s.teslim_tarihi IS NOT NULL THEN 1.0 / kn.n END)"),
     "ort_sepet": ("Ortalama sepet (TL)", "SUM(k.tutar_tl) / COUNT(DISTINCT s.siparis_id)"),
 }
 ORAN_METRIKLERI = {"iade_orani", "ort_teslim_gun", "ort_sepet"}
@@ -113,6 +118,7 @@ BOYUTLAR = {
 _FROM = """
 FROM siparisler s
 JOIN siparis_kalemleri k ON k.siparis_id = s.siparis_id
+JOIN (SELECT siparis_id, COUNT(*) AS n FROM siparis_kalemleri GROUP BY siparis_id) kn ON kn.siparis_id = s.siparis_id
 JOIN urunler u ON u.urun_id = k.urun_id
 JOIN kategoriler c ON c.kategori_id = u.kategori_id
 LEFT JOIN iadeler i ON i.kalem_id = k.kalem_id
@@ -216,6 +222,9 @@ def analyze_trend(db_path: Path, metric: str, donem_a_bas: str, donem_a_bit: str
         "ok": True,
         "metrik": metric,
         "metrik_etiketi": etiket,
+        **({"not": "Bu ciro kargo ücretini içermez; sipariş toplamından (toplam_tutar_tl) biraz düşüktür. "
+                   "Kullanıcıya tutar söylerken run_query ile hesaplanan ciroyu kullan, burada değişim oranına odaklan."}
+           if metric == "ciro" else {}),
         "donem_a": _donem(a, ta, metric),
         "donem_b": _donem(b, tb, metric),
         "degisim_yuzde": _yuvarla((tb - ta) / ta * 100) if ta and tb is not None else None,
