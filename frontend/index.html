@@ -1,11 +1,15 @@
 <!doctype html>
-<html lang="tr">
+<html lang="tr" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>VerSes · Satış verine sesli soru sor</title>
   <meta name="description" content="Satış verine Türkçe konuşarak soru sor. VerSes, ElevenLabs Agents ile seni dinler, veritabanından cevabı bulur, sesli anlatır ve grafiğini gösterir.">
-  <meta name="color-scheme" content="light dark">
+  <meta name="color-scheme" content="dark light">
+  <script>
+    // Site koyu temada açılır; kullanıcı köşedeki düğmeyle değiştirirse seçimi hatırlanır.
+    try { const t = localStorage.getItem("verses-tema"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch {}
+  </script>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2318181b'/%3E%3Crect x='7' y='13' width='3' height='9' rx='1.5' fill='%23fff'/%3E%3Crect x='12.5' y='8' width='3' height='16' rx='1.5' fill='%23fff'/%3E%3Crect x='18' y='11' width='3' height='11' rx='1.5' fill='%23fff'/%3E%3Crect x='23.5' y='14' width='3' height='6' rx='1.5' fill='%23fff'/%3E%3C/svg%3E">
   <link rel="preload" href="vendor/fonts/ibm-plex-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="vendor/fonts/ibm-plex-sans-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
@@ -18,11 +22,17 @@
   <div id="landing" class="landing">
     <header class="topbar">
       <a class="wordmark" href="./" aria-label="VerSes ana sayfa">VerSes</a>
+      <div class="top-right">
       <nav class="toplinks" aria-label="Sayfa">
         <a href="#elevenlabs">Nasıl konuşuyor?</a>
         <a href="#ornekler">Örnek sorular</a>
         <a href="https://github.com/MuhammedPekdemir/VerSes-ai-assistant" target="_blank" rel="noopener">GitHub <span aria-hidden="true">↗</span></a>
       </nav>
+      <button class="theme-toggle" type="button" aria-label="Açık temaya geç" title="Temayı değiştir">
+        <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-2a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM11 1h2v3h-2V1Zm0 19h2v3h-2v-3ZM3.5 4.9l1.4-1.4 2.1 2.1-1.4 1.4-2.1-2.1Zm13.1 13.1 1.4-1.4 2.1 2.1-1.4 1.4-2.1-2.1ZM1 11h3v2H1v-2Zm19 0h3v2h-3v-2ZM4.9 20.5l-1.4-1.4 2.1-2.1 1.4 1.4-2.1 2.1ZM18 7.4 16.6 6l2.1-2.1 1.4 1.4L18 7.4Z"/></svg>
+        <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 7a7 7 0 0 0 12 4.9A10 10 0 1 1 12.1 2 7 7 0 0 0 10 7Zm-6 5a8 8 0 0 0 15.3 3.3A9 9 0 0 1 8.7 4.7 8 8 0 0 0 4 12Z"/></svg>
+      </button>
+      </div>
     </header>
 
     <main>
@@ -145,6 +155,10 @@
       <div class="conn">
         <span class="conn-by">ElevenLabs Agents</span>
         <span id="status" class="status" data-state="idle" role="status">Bağlı değil</span>
+        <button class="theme-toggle" type="button" aria-label="Açık temaya geç" title="Temayı değiştir">
+          <svg class="sun" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 17a5 5 0 1 1 0-10 5 5 0 0 1 0 10Zm0-2a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM11 1h2v3h-2V1Zm0 19h2v3h-2v-3ZM3.5 4.9l1.4-1.4 2.1 2.1-1.4 1.4-2.1-2.1Zm13.1 13.1 1.4-1.4 2.1 2.1-1.4 1.4-2.1-2.1ZM1 11h3v2H1v-2Zm19 0h3v2h-3v-2ZM4.9 20.5l-1.4-1.4 2.1-2.1 1.4 1.4-2.1 2.1ZM18 7.4 16.6 6l2.1-2.1 1.4 1.4L18 7.4Z"/></svg>
+          <svg class="moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 7a7 7 0 0 0 12 4.9A10 10 0 1 1 12.1 2 7 7 0 0 0 10 7Zm-6 5a8 8 0 0 0 15.3 3.3A9 9 0 0 1 8.7 4.7 8 8 0 0 0 4 12Z"/></svg>
+        </button>
       </div>
     </header>
 
@@ -186,39 +200,58 @@
       <aside id="panel-home" class="panel-home" aria-label="Sonuçlar">
         <section id="panel" class="panel" aria-labelledby="chart-title">
           <div id="panel-empty" class="panel-empty">
-            <svg viewBox="0 0 120 64" aria-hidden="true">
-              <line x1="0" x2="120" y1="63.5" y2="63.5"/>
-              <rect x="6" y="38" width="14" height="25" rx="2"/><rect x="28" y="26" width="14" height="37" rx="2"/>
-              <rect x="50" y="32" width="14" height="31" rx="2"/><rect x="72" y="14" width="14" height="49" rx="2"/>
-              <rect x="94" y="22" width="14" height="41" rx="2"/>
-            </svg>
+            <div class="ghost" aria-hidden="true">
+              <span class="ghost-label"></span>
+              <span class="ghost-title"></span>
+              <svg viewBox="0 0 240 120" preserveAspectRatio="none">
+                <line x1="0" x2="240" y1="119.5" y2="119.5"/>
+                <rect x="6" y="70" width="22" height="50" rx="2"/><rect x="36" y="52" width="22" height="68" rx="2"/>
+                <rect x="66" y="62" width="22" height="58" rx="2"/><rect x="96" y="40" width="22" height="80" rx="2"/>
+                <rect x="126" y="48" width="22" height="72" rx="2"/><rect class="hi" x="156" y="14" width="22" height="106" rx="2"/>
+                <rect x="186" y="34" width="22" height="86" rx="2"/><rect x="216" y="44" width="22" height="76" rx="2"/>
+              </svg>
+            </div>
             <h2>Sonuçlar burada açılır</h2>
-            <p>Bir soru sorduğunda grafik, tablo ve çalışan sorgu bu alanda görünür. Önceki sonuçlara üstteki listeden dönebilirsin.</p>
+            <p>Bir soru sorduğunda VerSes'in bulduğu grafik, tablo ve çalıştırdığı sorgu bu kartta görünür.</p>
           </div>
 
           <div id="panel-body" class="panel-body" hidden>
-            <nav id="history" class="history" aria-label="Önceki sonuçlar" hidden></nav>
-            <header class="panel-head">
-              <div>
-                <h2 id="chart-title" tabindex="-1">Sonuç</h2>
-                <p id="sql-meta" class="meta"></p>
-              </div>
+            <div class="panel-bar">
+              <span id="panel-count" class="eyebrow">Sonuç</span>
+              <nav id="history" class="pager" aria-label="Sonuçlar arasında gez">
+                <button id="prev-result" class="icon-btn" type="button" aria-label="Önceki sonuç">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.4 7.4 14 6l-6 6 6 6 1.4-1.4L10.8 12l4.6-4.6Z"/></svg>
+                </button>
+                <button id="next-result" class="icon-btn" type="button" aria-label="Sonraki sonuç">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.6 16.6 10 18l6-6-6-6-1.4 1.4 4.6 4.6-4.6 4.6Z"/></svg>
+                </button>
+              </nav>
               <button id="panel-close" class="icon-btn" type="button" aria-label="Sonucu kapat">
                 <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.4 5 5.6 5.6L17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4 6.4 5Z"/></svg>
               </button>
-            </header>
-            <div class="tabs" role="tablist" aria-label="Görünüm">
-              <button class="tab" type="button" role="tab" data-view="chart" aria-controls="chart">Grafik</button>
-              <button class="tab" type="button" role="tab" data-view="table" aria-controls="table">Tablo</button>
-              <button class="tab" type="button" role="tab" data-view="sql" aria-controls="sql">Sorgu</button>
             </div>
-            <div id="chart" class="chart" role="tabpanel" aria-label="Grafik"></div>
-            <div id="table" class="table-wrap" role="tabpanel" aria-label="Tablo" hidden></div>
-            <div id="sql" class="sql-wrap" role="tabpanel" aria-label="Sorgu" hidden>
-              <p class="sql-note">VerSes'in bu cevap için veritabanında çalıştırdığı sorgu:</p>
-              <pre id="sql-box"><code>Henüz sorgu yok.</code></pre>
-              <button id="copy-sql" class="btn btn-quiet btn-sm" type="button">Kopyala</button>
-            </div>
+
+            <article class="result-card">
+              <header class="card-head">
+                <p id="card-q" class="card-q" hidden></p>
+                <h2 id="chart-title" tabindex="-1">Sonuç</h2>
+                <div id="summary" class="summary" hidden></div>
+              </header>
+              <div class="seg" role="tablist" aria-label="Görünüm">
+                <button class="tab" type="button" role="tab" data-view="chart" aria-controls="chart">Grafik</button>
+                <button class="tab" type="button" role="tab" data-view="table" aria-controls="table">Tablo</button>
+                <button class="tab" type="button" role="tab" data-view="sql" aria-controls="sql">Sorgu</button>
+              </div>
+              <div id="chart" class="chart" role="tabpanel" aria-label="Grafik"></div>
+              <div id="table" class="table-wrap" role="tabpanel" aria-label="Tablo" hidden></div>
+              <div id="sql" class="sql-wrap" role="tabpanel" aria-label="Sorgu" hidden>
+                <pre id="sql-box"><code>Henüz sorgu yok.</code></pre>
+                <button id="copy-sql" class="btn btn-quiet btn-sm" type="button">Sorguyu kopyala</button>
+              </div>
+              <footer class="card-foot">
+                <p id="sql-meta" class="meta"></p>
+              </footer>
+            </article>
           </div>
         </section>
       </aside>

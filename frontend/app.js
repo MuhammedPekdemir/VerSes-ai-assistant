@@ -1,6 +1,16 @@
 // VerSes ön yüzü: ElevenLabs ajanına bağlanır, client tool çağrılarını FastAPI'ye iletir,
 // sonuçları transkriptte ve sağ paneldeki grafik / tablo / SQL görünümlerinde gösterir.
-import { Conversation } from "https://cdn.jsdelivr.net/npm/@elevenlabs/client@1.28.0/+esm";
+// ElevenLabs istemcisi yalnızca oturum açılırken yüklenir: önce projedeki kopya, olmazsa CDN.
+// Yüklenemese bile sayfanın geri kalanı (giriş grafiği, butonlar) çalışmaya devam eder.
+const SDK_YOLLARI = ["./vendor/elevenlabs-client-1.28.0.js", "https://cdn.jsdelivr.net/npm/@elevenlabs/client@1.28.0/+esm"];
+let sdk = null;
+async function loadSdk() {
+  if (sdk) return sdk;
+  for (const yol of SDK_YOLLARI) {
+    try { sdk = (await import(yol)).Conversation; if (sdk) return sdk; } catch (e) { console.warn("ElevenLabs istemcisi yüklenemedi:", yol, e); }
+  }
+  throw new Error("ElevenLabs istemcisi yüklenemedi. İnternet bağlantını kontrol et; sayfayı yenileyip tekrar dene.");
+}
 
 const $ = (id) => document.getElementById(id);
 const ui = {
@@ -12,7 +22,8 @@ const ui = {
   startVoice: $("start-voice"), startText: $("start-text"), home: $("home"),
   landing: $("landing"), chat: $("chat"), stage: $("stage"),
   panel: $("panel"), panelHome: $("panel-home"), panelEmpty: $("panel-empty"), panelBody: $("panel-body"),
-  panelClose: $("panel-close"), history: $("history"),
+  panelClose: $("panel-close"), history: $("history"), panelCount: $("panel-count"),
+  prevResult: $("prev-result"), nextResult: $("next-result"), summary: $("summary"), cardQ: $("card-q"),
   heroBars: $("hero-bars"), heroNote: $("hero-note"),
 };
 
@@ -114,10 +125,14 @@ function scrollToEnd() {
   ui.chatBody.scrollTop = ui.chatBody.scrollHeight;
 }
 
+let lastQuestion = ""; // sonuç kartında hangi soruya cevap olduğunu göstermek için
 let lastAi = null; // sözü kesilirse işaretlemek için son ajan mesajı
 function addMsg(role, text) {
   ui.transcript.querySelector(".hint")?.remove();
-  if (role === "user") headline = null; // yeni soru: önceki sorunun toplamı yeni grafiğe karışmasın
+  if (role === "user") {
+    headline = null; // yeni soru: önceki sorunun toplamı yeni grafiğe karışmasın
+    lastQuestion = String(text).trim();
+  }
   const el = document.createElement("div");
   el.className = `msg ${role}`;
   // Ses modelinin duygu etiketlerini ([happy], [slow] gibi) ekranda gösterme
@@ -202,7 +217,8 @@ const clientTools = {
       chart: { type: "bar", x: BOYUT_AD[boyut] || boyut, y: [`Önce (${a})`, `Sonra (${b})`] },
       title: `${r.metrik_etiketi}: ${(BOYUT_AD[boyut] || boyut).toLocaleLowerCase("tr")} kırılımı`,
       sql: `-- analyze_trend aracı (sabit şablonlu SQL)\nmetrik : ${r.metrik}\nönce   : ${r.donem_a.baslangic} – ${r.donem_a.bitis}\nsonra  : ${r.donem_b.baslangic} – ${r.donem_b.bitis}\nboyut  : ${params.dimension || "hepsi"}`,
-      meta: `Genel değişim ${genel}`,
+      meta: `Önce ${a} · Sonra ${b} · analyze_trend`,
+      summary: { value: genel, dir: r.degisim_yuzde < 0 ? "down" : r.degisim_yuzde > 0 ? "up" : "", label: `genel değişim · ${a} → ${b}` },
     };
     return JSON.stringify(r);
   },
@@ -216,14 +232,14 @@ const clientTools = {
       const ys = (Array.isArray(y) ? y : String(y).split(",")).map((s) => s.trim()).filter((c) => last.columns.includes(c));
       if (ys.length) spec.y = ys;
     }
-    const snap = { data: last, spec, title: title || last.title || "Sonuç" };
+    const snap = { data: last, spec, title: title || last.title || "Sonuç", q: lastQuestion };
     // Döküm grafiğinden hemen önce tek sayılık bir toplam sorgulandıysa onu grafiğin üstüne koy
     if (spec.type !== "kpi" && headline && headline.rows !== last.rows && Date.now() - headline.at < HEADLINE_MS) {
       snap.headline = headline;
     }
     headline = null;
     addResult(snap);
-    return "Grafik hazırlandı; kullanıcı sohbetteki 'Grafik hazır' butonuyla sağ panelde açabilir.";
+    return "Grafik ekranda açıldı.";
   },
 };
 
@@ -255,12 +271,12 @@ function thumb(spec, data) {
   const sy = (v) => 31 - ((v - min) / (max - min || 1)) * 29;
   if (spec.type === "line") {
     const pts = vals.map((v, i) => `${(i / Math.max(vals.length - 1, 1)) * 52},${sy(v).toFixed(1)}`).join(" ");
-    return `<svg viewBox="0 0 52 32" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="var(--s1)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+    return `<svg viewBox="0 0 52 32" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
   }
   const w = 52 / vals.length;
   return `<svg viewBox="0 0 52 32" aria-hidden="true">${vals.map((v, i) => {
     const h = Math.max(2, 31 - sy(Math.max(v, 0))); // küçük değerler nokta gibi kaybolmasın
-    return `<rect x="${(i * w + w * 0.15).toFixed(1)}" y="${(31 - h).toFixed(1)}" width="${(w * 0.7).toFixed(1)}" height="${h.toFixed(1)}" rx="1" fill="var(--s1)"/>`;
+    return `<rect x="${(i * w + w * 0.15).toFixed(1)}" y="${(31 - h).toFixed(1)}" width="${(w * 0.7).toFixed(1)}" height="${h.toFixed(1)}" rx="1" fill="var(--accent)"/>`;
   }).join("")}</svg>`;
 }
 
@@ -282,17 +298,6 @@ function addResult(snap) {
   snap.btn = btn;
   ui.transcript.append(btn);
 
-  const h = document.createElement("button");
-  h.type = "button";
-  h.className = "hist";
-  h.title = snap.title;
-  h.innerHTML = `<i>${snap.n}</i>`;
-  h.append(snap.title);
-  h.addEventListener("click", () => openResult(snap));
-  snap.hist = h;
-  ui.history.append(h);
-  ui.history.hidden = results.length < 2;
-
   // En yeni sonuç kendiliğinden açılır: ekran boş kalmasın
   openResult(snap, { auto: true });
   scrollToEnd();
@@ -308,20 +313,26 @@ function placePanel() {
 
 function openResult(snap, { auto = false } = {}) {
   shown = snap;
-  for (const r of results) {
-    r.btn.classList.toggle("active", r === snap);
-    r.hist.setAttribute("aria-current", String(r === snap));
-  }
+  for (const r of results) r.btn.classList.toggle("active", r === snap);
   placePanel();
   ui.panelEmpty.hidden = true;
   ui.panelBody.hidden = false;
   ui.chartTitle.textContent = snap.title;
+  ui.panelCount.textContent = results.length > 1 ? `Sonuç ${snap.n} / ${results.length}` : "Sonuç";
+  ui.history.hidden = results.length < 2;
+  ui.prevResult.disabled = snap.n <= 1;
+  ui.nextResult.disabled = snap.n >= results.length;
+  ui.cardQ.hidden = !snap.q;
+  ui.cardQ.textContent = snap.q ? `“${snap.q}”` : "";
+  ui.cardQ.title = snap.q || "";
+  const sum = snap.data.summary;
+  ui.summary.hidden = !sum;
+  ui.summary.innerHTML = sum ? `<strong class="${sum.dir}">${esc(sum.value)}</strong><span>${esc(sum.label)}</span>` : "";
   ui.sqlMeta.textContent = snap.data.meta || "";
   ui.sqlBox.firstElementChild.textContent = snap.data.sql || "";
   renderTable(snap.data);
   setView("chart");
   ui.chart.innerHTML = "";
-  snap.hist.scrollIntoView({ block: "nearest", inline: "nearest" });
   // Panel yerleşip boyut alınca çiz ki Plotly doğru genişliği kullansın
   requestAnimationFrame(() => {
     if (shown !== snap) return; // bu arada başka bir sonuç açıldı
@@ -343,6 +354,8 @@ function closePanel() {
   if (btn?.isConnected) btn.focus({ preventScroll: true });
 }
 ui.panelClose.addEventListener("click", closePanel);
+ui.prevResult.addEventListener("click", () => shown && results[shown.n - 2] && openResult(results[shown.n - 2]));
+ui.nextResult.addEventListener("click", () => shown && results[shown.n] && openResult(results[shown.n]));
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closePanel(); });
 narrow.addEventListener("change", () => {
   if (narrow.matches) { placePanel(); return; }
@@ -358,7 +371,7 @@ ui.copySql.addEventListener("click", async () => {
   } catch {
     ui.copySql.textContent = "Kopyalanamadı";
   }
-  setTimeout(() => { ui.copySql.textContent = "Kopyala"; }, 1500);
+  setTimeout(() => { ui.copySql.textContent = "Sorguyu kopyala"; }, 1500);
 });
 
 // ---------------------------------------------------------------- ekranlar
@@ -371,7 +384,6 @@ function showScreen(name) {
 
 // ---------------------------------------------------------------- görselleştirme
 const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-const series = () => [1, 2, 3, 4, 5, 6, 7, 8].map((i) => cssVar(`--s${i}`));
 
 // Grafiğin üstündeki toplam: tek satırlık sonucun sayı kolonları (ör. "10.009.483,95 TL · Ciro")
 function headlineHtml(h) {
@@ -402,11 +414,13 @@ function renderChart(spec, data, head = null) {
   if (!spec.x || col(spec.x) < 0) spec = { ...spec, x: columns.find((_, i) => typeof rows[0][i] !== "number") };
   if (spec.type === "table" || !spec.x || !spec.y?.length || !window.Plotly) { setView("table"); return; }
 
-  // Plotly kendi kutusuna çizer; üstte toplam varsa ikisi alt alta durur
-  ui.chart.innerHTML = `${head ? headlineHtml(head) : ""}<div class="plot"></div>`;
+  // Plotly kendi kutusuna çizer; üstte toplam ve renk anahtarı varsa onlar üstte durur.
+  ui.chart.innerHTML = `${head ? headlineHtml(head) : ""}<div class="legend-slot"></div><div class="plot"></div>`;
   const plotEl = ui.chart.querySelector(".plot");
+  const slot = ui.chart.querySelector(".legend-slot");
 
-  const pal = series();
+  // Renk dili giriş sayfasındaki grafikle aynı: veri gri, öne çıkan tek şey mavi.
+  const accent = cssVar("--accent"), gray = cssVar("--bar"), surface = cssVar("--surface");
   const xs = rows.map((r) => r[col(spec.x)]);
   const timeAxis = xs.every((v) => isMonth(v) || isDay(v));
   // Çok noktalı zaman ekseninde kısa etiket (Oca 26), az noktada tam (Oca 2026)
@@ -415,7 +429,13 @@ function renderChart(spec, data, head = null) {
   const horizontal = spec.type === "bar" && !timeAxis &&
     (xs.length > 8 || xs.some((v) => String(v).length > 12));
 
-  let traces;
+  // Değer biçimi verinin büyüklüğüne göre: 12M gibi kısaltma yalnızca büyük sayılarda.
+  // "~s" küçük değerleri "50m" (mili) yazar; oranlarda (0,05) ve günlerde (2,3) ondalık göster.
+  const allVals = spec.y.flatMap((c) => rows.map((r) => Math.abs(+r[col(c)] || 0)));
+  const maxVal = Math.max(0, ...allVals);
+  const valFmt = maxVal >= 1e4 ? ",.0f" : maxVal >= 10 ? ",.1~f" : ",.3~f";
+  const tickFmt = maxVal >= 1e4 ? "~s" : maxVal >= 10 ? ",.0f" : ",.2~f";
+  let traces, onLegend = null;
   if (spec.type === "line" && spec.series && col(spec.series) >= 0) {
     // Uzun formatı (ay, kategori, değer) her kategori için ayrı çizgiye çevir
     const groups = new Map();
@@ -425,36 +445,73 @@ function renderChart(spec, data, head = null) {
       groups.get(g).x.push(xLabel(r[col(spec.x)]));
       groups.get(g).y.push(r[col(spec.y[0])]);
     }
-    // 8'den fazla seri olursa renk tekrarlanmasın: ilk 7 ayrı, kalanı gri tek bir "Diğer" tonunda
+    const names = [...groups.keys()].map(String);
+    // Varsayılan vurgu: toplamı en büyük seri. Diğerleri geride gri durur; listeden başka seri seçilebilir.
+    const totals = [...groups.values()].map((d) => d.y.reduce((t, v) => t + (+v || 0), 0));
+    let pick = totals.indexOf(Math.max(...totals));
+    const style = (i) => (i === pick
+      ? { color: accent, width: 3 }
+      : { color: gray, width: 1.4 });
     traces = [...groups].map(([name, d], i) => ({
       ...d, name: String(name), type: "scatter", mode: "lines",
-      line: { color: i < 8 ? pal[i] : cssVar("--muted"), width: 2 },
-      hovertemplate: "%{y:,.0f}<extra>%{fullData.name}</extra>",
+      line: style(i), opacity: i === pick ? 1 : 0.45,
+      hovertemplate: `%{y:${valFmt}}<extra>%{fullData.name}</extra>`,
     }));
+    // Vurgulu seri en üstte çizilsin
+    traces.push(traces.splice(pick, 1)[0]);
+    const order = traces.map((t) => t.name);
+    slot.innerHTML = `<div class="legend" role="group" aria-label="Vurgulanacak seri">${names.map((n, i) =>
+      `<button type="button" data-i="${i}" aria-pressed="${i === pick}">${esc(n)}</button>`).join("")}</div>`;
+    onLegend = (i) => {
+      pick = i;
+      const idx = names.map((n) => order.indexOf(n));
+      Plotly.restyle(plotEl, {
+        "line.color": names.map((_, j) => style(j).color),
+        "line.width": names.map((_, j) => style(j).width),
+        opacity: names.map((_, j) => (j === pick ? 1 : 0.45)),
+      }, idx);
+      Plotly.moveTraces(plotEl, order.indexOf(names[pick]));
+      order.push(order.splice(order.indexOf(names[pick]), 1)[0]);
+      slot.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(+b.dataset.i === pick)));
+    };
+    slot.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => onLegend(+b.dataset.i)));
   } else {
     const many = rows.length > 24;
+    const multi = spec.y.length > 1;
+    // Tek seri: en büyük değer mavi, gerisi gri. Çok seri (ör. önce / sonra): son seri mavi, öncekiler gri tonlarda.
     traces = spec.y.map((c, i) => {
       const vals = rows.map((r) => r[col(c)]);
+      const isHi = !multi || i === spec.y.length - 1;
+      const tone = multi ? (isHi ? accent : gray) : accent;
       const t = {
         name: c,
         type: spec.type === "line" ? "scatter" : "bar",
-        marker: { color: pal[i % 8] },
-        hovertemplate: `%{${horizontal ? "x" : "y"}:,.2~f}<extra>${esc(c)}</extra>`,
+        hovertemplate: `%{${horizontal ? "x" : "y"}:${valFmt}}<extra>${esc(c)}</extra>`,
       };
       if (spec.type === "line") {
         t.mode = many ? "lines" : "lines+markers";
-        t.line = { color: pal[i % 8], width: 2 };
-        t.marker = { color: pal[i % 8], size: 8, line: { color: cssVar("--surface"), width: 2 } };
+        t.line = { color: tone, width: isHi ? 2.5 : 1.6 };
+        t.marker = { color: tone, size: 7, line: { color: surface, width: 2 } };
+        if (!multi) { t.fill = "tozeroy"; t.fillcolor = cssVar("--accent-soft"); }
+      } else if (!multi) {
+        const max = Math.max(...vals.map((v) => +v || 0));
+        t.marker = { color: vals.map((v) => (+v === max ? accent : gray)) };
+      } else {
+        t.marker = { color: tone, opacity: isHi ? 1 : 0.55 };
       }
       if (horizontal) { t.orientation = "h"; t.x = vals; t.y = xs.map(xLabel); }
       else { t.x = xs.map(xLabel); t.y = vals; }
       return t;
     });
+    if (multi) {
+      slot.innerHTML = `<div class="key">${spec.y.map((c, i) =>
+        `<span><i class="${i === spec.y.length - 1 ? "hi" : ""}" style="${i === spec.y.length - 1 ? "" : "opacity:.55"}"></i>${esc(c)}</span>`).join("")}</div>`;
+    }
   }
 
   const ink2 = cssVar("--ink-2"), rule = cssVar("--rule"), ink = cssVar("--ink");
-  const valueAxis = { gridcolor: rule, zerolinecolor: cssVar("--rule-strong"), tickformat: "~s", automargin: true, tickfont: { family: cssVar("--mono"), size: 11 } };
-  const catAxis = { type: "category", automargin: true, showgrid: false, linecolor: cssVar("--rule-strong"), tickfont: { size: 12 } };
+  const valueAxis = { gridcolor: rule, zerolinecolor: cssVar("--rule-strong"), tickformat: tickFmt, automargin: true, tickfont: { family: cssVar("--mono"), size: 11, color: cssVar("--muted") } };
+  const catAxis = { type: "category", automargin: true, showgrid: false, linecolor: cssVar("--rule-strong"), tickfont: { size: 12, color: ink2 } };
   Plotly.newPlot(plotEl, traces, {
     margin: { t: 8, r: 8, b: 8, l: 8 },
     paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
@@ -465,8 +522,7 @@ function renderChart(spec, data, head = null) {
     barmode: "group", bargap: 0.3, bargroupgap: 0.08, barcornerradius: 3,
     hovermode: spec.type === "line" ? "x unified" : "closest",
     hoverlabel: { bgcolor: ink, bordercolor: ink, font: { color: cssVar("--bg"), family: cssVar("--sans") } },
-    showlegend: traces.length > 1,
-    legend: { orientation: "h", x: 0, y: 1.02, yanchor: "bottom", font: { size: 12, color: ink2 } },
+    showlegend: false,
   }, { responsive: true, displayModeBar: false });
 }
 
@@ -504,27 +560,48 @@ function errText(m) {
   return m.message || m.reason || JSON.stringify(m);
 }
 
+// Her oturum bir numara alır. endConversation numarayı artırır; böylece kapatılmış (ya da hâlâ
+// bağlanmakta olan) eski oturumun geç gelen olayları ekrandaki durumu bozamaz.
+let sessionGen = 0;
+class SessionCancelled extends Error {}
+
+// Yazılıdan sesliye geçişte ajan önceki konuşmayı bilsin diye kısa geçmiş tutulur
+const history = []; // { who: "user" | "ai", text }
+function remember(who, text) {
+  history.push({ who, text: String(text).slice(0, 400) });
+  if (history.length > 12) history.shift();
+}
+
 async function openSession(textOnly) {
+  const gen = sessionGen;
+  const mine = () => gen === sessionGen;
   setStatus("Bağlanıyor…");
-  const s = await api("/api/session");
+  const [s, Conversation] = await Promise.all([api("/api/session"), loadSdk()]);
+  if (!mine()) throw new SessionCancelled();
   if (!s.ok) throw new Error(s.error);
   const auth = s.signed_url ? { signedUrl: s.signed_url } : { agentId: s.agent_id };
-  let conv = null; // onDisconnect, startSession bitmeden de çağrılabilir
-  conv = await Conversation.startSession({
+  const gecmis = history.slice(); // bu oturumdan önceki konuşma
+  let conv;
+  try {
+    conv = await Conversation.startSession({
     ...auth,
     textOnly,
     clientTools,
     onConnect: () => {
+      if (!mine()) return;
       setStatus(textOnly ? "Bağlı · yazılı" : "Bağlı · sesli", "connected");
       if (stage === "idle") setStage("idle");
     },
     onDisconnect: () => {
-      if (conversation !== conv && conversation !== null) return; // eski oturumun geç gelen kapanışı
+      if (!mine()) return; // eski oturumun geç gelen kapanışı
+      sessionGen++;
       conversation = null; setVoiceUi(false); setStatus("Bağlı değil"); setStage("idle");
     },
-    onError: (m) => { setStatus("Hata", "error"); addMsg("tool err", `Hata: ${errText(m)}`); },
+    onError: (m) => { if (!mine()) return; setStatus("Hata", "error"); addMsg("tool err", `Hata: ${errText(m)}`); },
     onMessage: ({ message, role, source }) => {
+      if (!mine()) return;
       const who = (role || source) === "user" ? "user" : "ai";
+      remember(who, message);
       const el = addMsg(who, message);
       if (who === "ai") lastAi = el;
       if (who === "user") setStage("thinking");
@@ -532,19 +609,37 @@ async function openSession(textOnly) {
     },
     // Kullanıcı ajanın sözünü keserse ElevenLabs konuşmayı durdurur; bunu mesajın yanında göster
     onInterruption: () => {
+      if (!mine()) return;
       lastAi?.classList.add("cut");
       if (voiceMode) setStage("listening");
     },
     onModeChange: ({ mode }) => {
+      if (!mine()) return;
       if (mode === "speaking") setStage("speaking");
       else if (voiceMode && stage !== "thinking" && stage !== "tool") setStage("listening");
     },
   });
+  } catch (e) {
+    // İmzalı bağlantı alınamadıysa sunucunun uyarısı hatanın asıl sebebini söyler
+    throw new Error(errText(e) + (s.warning ? ` (${s.warning})` : ""));
+  }
+  if (!mine()) {
+    // Bağlanırken kullanıcı vazgeçti (ör. ana sayfaya döndü): oturumu açık bırakma
+    try { await conv.endSession(); } catch { /* zaten kapalı */ }
+    throw new SessionCancelled();
+  }
   conversation = conv;
+  if (gecmis.length) {
+    const ozet = gecmis.map((m) => `${m.who === "user" ? "Kullanıcı" : "VerSes"}: ${m.text}`).join("\n");
+    try {
+      conv.sendContextualUpdate(`Bu oturumdan önce kullanıcıyla yazılı olarak şu konuşma geçti. Takip sorularında bu bağlamı kullan:\n${ozet}`);
+    } catch (e) { console.warn("Bağlam gönderilemedi:", e); }
+  }
   return conv;
 }
 
 async function endConversation() {
+  sessionGen++; // bağlanmakta olan oturum da iptal sayılır
   const c = conversation;
   conversation = null;
   if (c) { try { await c.endSession(); } catch { /* zaten kapalı */ } }
@@ -573,6 +668,7 @@ async function toggleVoice() {
     await start(false);
     setVoiceUi(true);
   } catch (e) {
+    if (e instanceof SessionCancelled) return;
     setStatus("Hata", "error");
     const izin = {
       NotAllowedError: "Mikrofon izni verilmedi. Adres çubuğundan izin verebilir ya da yazarak sorabilirsin.",
@@ -603,11 +699,13 @@ async function sendText(text) {
   text = text.trim();
   if (!text) return;
   try {
-    if (!conversation) await start(true);
+    const conv = conversation || await start(true);
     addMsg("user", text); // yazılan mesaj sesli modda da transkripte düşmez, kendimiz ekleriz
-    conversation.sendUserMessage(text);
+    remember("user", text);
+    conv.sendUserMessage(text);
     setStage("thinking");
   } catch (e) {
+    if (e instanceof SessionCancelled) return;
     setStatus("Hata", "error");
     addMsg("tool err", `Bağlantı hatası: ${errText(e)}`);
   }
@@ -723,6 +821,21 @@ new ResizeObserver(([e]) => {
   const w = Math.round(e.contentRect.width);
   if (heroRows && w && w !== heroW) { heroW = w; drawHero(heroRows, false); }
 }).observe(ui.heroBars);
+
+// ---------------------------------------------------------------- tema
+// Varsayılan koyu; seçim tarayıcıda saklanır. Grafikler renkleri CSS'ten okuduğu için yeniden çizilir.
+function setTheme(t) {
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem("verses-tema", t); } catch {}
+  document.querySelectorAll(".theme-toggle").forEach((b) => b.setAttribute("aria-label", t === "dark" ? "Açık temaya geç" : "Koyu temaya geç"));
+  if (heroRows) drawHero(heroRows, false);
+  if (shown && !ui.chart.hidden) {
+    try { renderChart(shown.spec, shown.data, shown.headline); } catch (e) { console.error(e); }
+  }
+}
+document.querySelectorAll(".theme-toggle").forEach((b) => b.addEventListener("click", () =>
+  setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark")));
+setTheme(document.documentElement.dataset.theme === "light" ? "light" : "dark");
 
 // Test ve değerlendirme betikleri için
 window.voicebi = { clientTools, sendText, get last() { return last; } };
